@@ -1,0 +1,9 @@
+{
+  "name": "setup-memory",
+  "version": "1.0.0",
+  "description": "Sets up a self-maintaining AI memory system for Claude Code that automatically learns your codebase over time. Every session start injects live git context. Every session end runs a background AI to update topic files with new discoveries.",
+  "author": {
+    "name": "Kolin",
+    "email": ""
+  }
+}
