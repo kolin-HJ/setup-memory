@@ -3,17 +3,19 @@
  * Stop Hook — Session Activity Capture
  *
  * Runs when a Claude Code session ends. Records what was worked on and
- * spawns a background AI process to update memory topic files.
+ * spawns all background AI processes as detached fire-and-forget jobs:
+ *   - memory-updater.js   — two-pass recursive topic file updates
+ *   - session-synthesizer.js — generates briefing for next session start
+ *   - memory-health.js    — periodic topic file health check (every 10 sessions)
  *
- * Also synchronously runs the session synthesizer (generates briefing for
- * next session start) and a periodic memory health checker.
+ * Returns immediately so the Stop hook completes in under a second.
  *
  * PORTABLE: Uses __dirname and git to resolve paths — no hardcoded values.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn, spawnSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 const MEMORY_DIR = path.join(__dirname, '..');
 const SESSIONS_DIR = path.join(MEMORY_DIR, 'sessions');
@@ -39,6 +41,24 @@ function exec(cmd) {
   }
 }
 
+function detectPendingTopics(changedFiles, assistantContent) {
+  const pending = new Set();
+  try {
+    const topicsDir = path.join(MEMORY_DIR, 'topics');
+    const existing = fs.readdirSync(topicsDir).filter(f => f.endsWith('.md'));
+    const combined = (changedFiles + ' ' + assistantContent).toLowerCase();
+    for (const topicFile of existing) {
+      const keyword = topicFile.replace('.md', '').replace(/-/g, '');
+      const keyword2 = topicFile.replace('.md', '');
+      const keyword3 = topicFile.replace('.md', '').replace(/-/g, '_');
+      if (combined.includes(keyword) || combined.includes(keyword2) || combined.includes(keyword3)) {
+        pending.add(topicFile.replace('.md', ''));
+      }
+    }
+  } catch {}
+  return pending;
+}
+
 const now = new Date();
 const dateStr = now.toISOString().split('T')[0];
 const timeStr = now.toTimeString().slice(0, 5);
@@ -53,7 +73,7 @@ const allChangedFiles = [...new Set([
 ].filter(Boolean))].join('\n');
 
 let userRequests = [];
-let pendingMemoryTopics = new Set();
+let assistantContent = '';
 
 const transcriptPath = process.env.CLAUDE_TRANSCRIPT_PATH;
 if (transcriptPath) {
@@ -74,10 +94,7 @@ if (transcriptPath) {
           const content = Array.isArray(msg.content)
             ? msg.content.map(c => c.text || '').join(' ')
             : (msg.content || '');
-          const c = content.toLowerCase();
-          if (c.includes('demandplan') || c.includes('demand plan')) pendingMemoryTopics.add('demand-plan');
-          if (c.includes('dashboard') || c.includes('pab')) pendingMemoryTopics.add('dashboard');
-          if (c.includes('bigquery') || c.includes('schema')) pendingMemoryTopics.add('bigquery');
+          assistantContent += content + ' ';
         }
       } catch {}
     }
@@ -85,13 +102,7 @@ if (transcriptPath) {
   } catch {}
 }
 
-if (allChangedFiles) {
-  const f = allChangedFiles.toLowerCase();
-  if (f.includes('demandplan') || f.includes('demand_plan')) pendingMemoryTopics.add('demand-plan');
-  if (f.includes('dashboard')) pendingMemoryTopics.add('dashboard');
-  if (f.includes('bigquery')) pendingMemoryTopics.add('bigquery');
-  if (f.includes('purchaseplan')) pendingMemoryTopics.add('purchase-plan');
-}
+const pendingMemoryTopics = detectPendingTopics(allChangedFiles, assistantContent);
 
 const lines = [`**${dateStr} ${timeStr}** | Branch: \`${branch || 'unknown'}\``, ''];
 if (allChangedFiles) {
@@ -125,37 +136,28 @@ if (pendingMemoryTopics.size > 0) {
   try { fs.unlinkSync(path.join(SESSIONS_DIR, 'pending-updates.md')); } catch {}
 }
 
-// Spawn background AI memory updater (detached, fire-and-forget)
+// Log that background jobs are being spawned
+const logPath = path.join(MEMORY_DIR, 'sessions', 'updater-log.md');
+const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+try {
+  fs.appendFileSync(logPath, `\n## ${timestamp} — session ended, spawning background jobs\n`, 'utf8');
+} catch {}
+
+function spawnDetached(script, args) {
+  if (!fs.existsSync(script)) return;
+  const child = spawn(process.execPath, [script, ...args], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
+}
+
+// Spawn all three background jobs (detached, fire-and-forget)
 if (transcriptPath) {
-  const updaterScript = path.join(MEMORY_DIR, 'hooks', 'memory-updater.js');
-  if (fs.existsSync(updaterScript)) {
-    const child = spawn(process.execPath, [updaterScript, transcriptPath, PROJECT_DIR, MEMORY_DIR], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    child.unref();
-  }
+  spawnDetached(path.join(MEMORY_DIR, 'hooks', 'memory-updater.js'), [transcriptPath, PROJECT_DIR, MEMORY_DIR]);
+  spawnDetached(path.join(MEMORY_DIR, 'hooks', 'session-synthesizer.js'), [transcriptPath, PROJECT_DIR, MEMORY_DIR]);
 }
-
-// Run session synthesizer synchronously (fast, ~5-10s, improves next session start)
-const synthScript = path.join(MEMORY_DIR, 'hooks', 'session-synthesizer.js');
-if (fs.existsSync(synthScript) && transcriptPath) {
-  spawnSync(process.execPath, [synthScript, transcriptPath, PROJECT_DIR, MEMORY_DIR], {
-    stdio: 'inherit',
-    timeout: 60000,
-    windowsHide: true,
-  });
-}
-
-// Periodic memory health check (runs every 10 sessions)
-const healthScript = path.join(MEMORY_DIR, 'hooks', 'memory-health.js');
-if (fs.existsSync(healthScript)) {
-  spawnSync(process.execPath, [healthScript, PROJECT_DIR, MEMORY_DIR], {
-    stdio: 'inherit',
-    timeout: 120000,
-    windowsHide: true,
-  });
-}
+spawnDetached(path.join(MEMORY_DIR, 'hooks', 'memory-health.js'), [PROJECT_DIR, MEMORY_DIR]);
 
 process.stdout.write(JSON.stringify({ decision: 'approve' }));
