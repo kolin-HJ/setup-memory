@@ -7,7 +7,7 @@ A Claude Code plugin that sets up a self-maintaining AI memory system for any pr
 - **Session start**: Automatically injects your git branch, recent commits, modified files, and an AI-synthesized session briefing as context — Claude knows what you're working on before you type a word
 - **Session end**: Captures what was worked on from the session transcript, then:
   - Spawns a background `claude -p haiku` process (two-pass recursive) that reads the transcript and updates topic files
-  - Synchronously runs a session synthesizer to pre-compute a briefing for the next session start
+  - Spawns a background session synthesizer that pre-computes a briefing for the next session start
   - Runs a periodic memory health check every 10 sessions to audit and consolidate topic files
 - **Over time**: Topic files in `memory/topics/` accumulate verified facts about your codebase — schema details, code paths, bugs fixed, patterns discovered — making Claude progressively smarter about your project
 

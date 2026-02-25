@@ -128,15 +128,17 @@ try {
   fs.appendFileSync(datePath, separator + sessionContent, 'utf8');
 } catch {}
 
-if (pendingMemoryTopics.size > 0) {
-  const topicsContent = [
-    'Topics touched in last session that may need memory updates:',
-    ...[...pendingMemoryTopics].map(t => `- [ ] \`memory/topics/${t}.md\``),
-  ].join('\n');
-  fs.writeFileSync(path.join(SESSIONS_DIR, 'pending-updates.md'), topicsContent, 'utf8');
-} else {
-  try { fs.unlinkSync(path.join(SESSIONS_DIR, 'pending-updates.md')); } catch {}
-}
+try {
+  if (pendingMemoryTopics.size > 0) {
+    const topicsContent = [
+      'Topics touched in last session that may need memory updates:',
+      ...[...pendingMemoryTopics].map(t => `- [ ] \`memory/topics/${t}.md\``),
+    ].join('\n');
+    fs.writeFileSync(path.join(SESSIONS_DIR, 'pending-updates.md'), topicsContent, 'utf8');
+  } else {
+    try { fs.unlinkSync(path.join(SESSIONS_DIR, 'pending-updates.md')); } catch {}
+  }
+} catch {}
 
 // Log that background jobs are being spawned
 const logPath = path.join(MEMORY_DIR, 'sessions', 'updater-log.md');
