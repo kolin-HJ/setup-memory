@@ -120,11 +120,13 @@ if (userRequests.length > 0) {
 
 const sessionContent = lines.join('\n');
 
-fs.mkdirSync(SESSIONS_DIR, { recursive: true });
-fs.writeFileSync(path.join(SESSIONS_DIR, 'latest.md'), sessionContent, 'utf8');
-const datePath = path.join(SESSIONS_DIR, `${dateStr}.md`);
-const separator = fs.existsSync(datePath) ? '\n\n---\n\n' : '';
-fs.appendFileSync(datePath, separator + sessionContent, 'utf8');
+try {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(SESSIONS_DIR, 'latest.md'), sessionContent, 'utf8');
+  const datePath = path.join(SESSIONS_DIR, `${dateStr}.md`);
+  const separator = fs.existsSync(datePath) ? '\n\n---\n\n' : '';
+  fs.appendFileSync(datePath, separator + sessionContent, 'utf8');
+} catch {}
 
 if (pendingMemoryTopics.size > 0) {
   const topicsContent = [
@@ -149,6 +151,7 @@ function spawnDetached(script, args) {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+    cwd: PROJECT_DIR,
   });
   child.unref();
 }
