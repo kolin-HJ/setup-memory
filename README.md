@@ -57,10 +57,13 @@ Session End
 When you run `/setup-memory` inside Claude Code, it will:
 
 1. Verify you're inside a git repository
-2. Create all hook files in your project's memory directory
-3. Write a starter `MEMORY.md` tailored to your tech stack
-4. Update `.claude/settings.local.json` with `SessionStart` and `Stop` hooks
-5. Test both hooks and confirm they work before finishing
+2. Find the hook files inside the plugin installation directory
+3. Copy all 5 hook files into your project's memory directory
+4. Write a starter `MEMORY.md` tailored to your tech stack (skipped if one exists)
+5. Update `.claude/settings.local.json` with `SessionStart` and `Stop` hooks
+6. Test both hooks and confirm they work before finishing
+
+Re-running `/setup-memory` on an already-set-up project updates the hooks to the latest plugin version.
 
 ## Why recursive?
 
