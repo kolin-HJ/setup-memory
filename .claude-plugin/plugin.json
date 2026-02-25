@@ -1,0 +1,12 @@
+{
+  "name": "setup-memory",
+  "version": "1.1.0",
+  "description": "Sets up a self-maintaining AI memory system for Claude Code. Every session start injects live git context. Every session end runs a background AI to update topic files with new discoveries.",
+  "author": {
+    "name": "Kolin",
+    "url": "https://github.com/kolin-hj"
+  },
+  "repository": "https://github.com/kolin-hj/setup-memory",
+  "license": "MIT",
+  "keywords": ["memory", "productivity", "sessions", "context", "git"]
+}

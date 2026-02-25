@@ -98,14 +98,24 @@ function readFile(relPath) {
   }
 }
 
-function detectActiveDomains(modifiedFiles) {
-  const domains = new Set();
-  const f = modifiedFiles.toLowerCase();
-  if (f.includes('demandplan') || f.includes('demand_plan')) domains.add('demand-plan');
-  if (f.includes('dashboard') || f.includes('unified')) domains.add('dashboard');
-  if (f.includes('purchaseplan') || f.includes('purchase_plan')) domains.add('purchase-plan');
-  if (f.includes('bigquery')) domains.add('bigquery');
-  return domains;
+function getTopicHints(modifiedFiles) {
+  try {
+    const topicsDir = path.join(MEMORY_DIR, 'topics');
+    const topics = fs.readdirSync(topicsDir).filter(f => f.endsWith('.md'));
+    if (topics.length === 0) return '';
+    const f = modifiedFiles.toLowerCase();
+    const relevant = topics.filter(t => {
+      const keyword = t.replace('.md', '').replace(/-/g, '');
+      const keyword2 = t.replace('.md', '');
+      return f.includes(keyword) || f.includes(keyword2);
+    });
+    if (relevant.length > 0) {
+      return `\n**Relevant topic files:** ${relevant.map(t => `\`memory/topics/${t}\``).join(', ')} — read for deep context`;
+    }
+    return `\n**Topic files available:** ${topics.map(t => `\`memory/topics/${t}\``).join(', ')}`;
+  } catch {
+    return '';
+  }
 }
 
 const branch = exec('git branch --show-current');
@@ -116,17 +126,14 @@ const lastDiffFiles = exec('git diff --name-only HEAD');
 const lastSession = readFile('sessions/latest.md');
 const pendingUpdates = readFile('sessions/pending-updates.md');
 
-const activeDomains = detectActiveDomains(modifiedFiles + lastDiffFiles);
-const domainHints = activeDomains.size > 0
-  ? `\n**Active domains detected:** ${[...activeDomains].join(', ')} — consider reading memory/topics/*.md for deep context`
-  : '';
+const topicHints = getTopicHints(modifiedFiles + lastDiffFiles);
 
 const parts = [];
 if (branch) parts.push(`**Branch:** \`${branch}\``);
 if (recentCommits) parts.push(`**Recent Commits (last 7):**\n\`\`\`\n${recentCommits}\n\`\`\``);
 if (modifiedFiles) parts.push(`**Uncommitted Changes:**\n\`\`\`\n${modifiedFiles}\n\`\`\``);
 else parts.push('**Uncommitted Changes:** (working tree clean)');
-if (domainHints) parts.push(domainHints);
+if (topicHints) parts.push(topicHints);
 if (lastSession) parts.push(`**Last Session Summary:**\n${lastSession}`);
 if (pendingUpdates) parts.push(`**⚠ Pending Memory Updates (from last session):**\n${pendingUpdates}`);
 
@@ -183,6 +190,23 @@ function exec(cmd) {
   }
 }
 
+function detectPendingTopics(changedFiles, assistantContent) {
+  const pending = new Set();
+  try {
+    const topicsDir = path.join(MEMORY_DIR, 'topics');
+    const existing = fs.readdirSync(topicsDir).filter(f => f.endsWith('.md'));
+    const combined = (changedFiles + ' ' + assistantContent).toLowerCase();
+    for (const topicFile of existing) {
+      const keyword = topicFile.replace('.md', '').replace(/-/g, '');
+      const keyword2 = topicFile.replace('.md', '');
+      if (combined.includes(keyword) || combined.includes(keyword2)) {
+        pending.add(topicFile.replace('.md', ''));
+      }
+    }
+  } catch {}
+  return pending;
+}
+
 const now = new Date();
 const dateStr = now.toISOString().split('T')[0];
 const timeStr = now.toTimeString().slice(0, 5);
@@ -197,7 +221,7 @@ const allChangedFiles = [...new Set([
 ].filter(Boolean))].join('\n');
 
 let userRequests = [];
-let pendingMemoryTopics = new Set();
+let assistantContent = '';
 
 const transcriptPath = process.env.CLAUDE_TRANSCRIPT_PATH;
 if (transcriptPath) {
@@ -218,10 +242,7 @@ if (transcriptPath) {
           const content = Array.isArray(msg.content)
             ? msg.content.map(c => c.text || '').join(' ')
             : (msg.content || '');
-          const c = content.toLowerCase();
-          if (c.includes('demandplan') || c.includes('demand plan')) pendingMemoryTopics.add('demand-plan');
-          if (c.includes('dashboard') || c.includes('pab')) pendingMemoryTopics.add('dashboard');
-          if (c.includes('bigquery') || c.includes('schema')) pendingMemoryTopics.add('bigquery');
+          assistantContent += content + ' ';
         }
       } catch {}
     }
@@ -229,13 +250,7 @@ if (transcriptPath) {
   } catch {}
 }
 
-if (allChangedFiles) {
-  const f = allChangedFiles.toLowerCase();
-  if (f.includes('demandplan') || f.includes('demand_plan')) pendingMemoryTopics.add('demand-plan');
-  if (f.includes('dashboard')) pendingMemoryTopics.add('dashboard');
-  if (f.includes('bigquery')) pendingMemoryTopics.add('bigquery');
-  if (f.includes('purchaseplan')) pendingMemoryTopics.add('purchase-plan');
-}
+const pendingMemoryTopics = detectPendingTopics(allChangedFiles, assistantContent);
 
 const lines = [`**${dateStr} ${timeStr}** | Branch: \`${branch || 'unknown'}\``, ''];
 if (allChangedFiles) {
@@ -404,15 +419,13 @@ try {
 } catch {}
 ```
 
-### Step 7 — Create or restructure `<memory-dir>/MEMORY.md`
+### Step 7 — Create `<memory-dir>/MEMORY.md`
 
-This step always runs — whether MEMORY.md exists or not.
+**Only run this step if `MEMORY.md` does NOT already exist** — never overwrite a user's existing memory file.
 
-**First**, scan the project: read `package.json`, top-level folder names, `.claude/commands/` if present, and any existing `MEMORY.md` or `CLAUDE.md` files. Collect all useful information: tech stack, existing rules, custom commands, terminology, known patterns.
+Scan the project first: read `package.json`, top-level folder names, `.claude/commands/` if present, and any `CLAUDE.md` files. Collect tech stack, custom commands, and key patterns.
 
-**If MEMORY.md already exists**, read its full contents. Extract everything valuable from it (rules, commands, patterns, terminology, project-specific notes) and carry it forward into the new version. Do not discard information — restructure it into the format below.
-
-**Then write a single clean MEMORY.md** using this structure. Keep it under **150 lines** — this file is auto-loaded into every session and the hard limit is 200 lines (anything beyond line 200 is silently ignored).
+Write a starter `MEMORY.md` under **150 lines** using this structure:
 
 ```markdown
 # Auto Memory — [Project Name]
@@ -422,7 +435,6 @@ This step always runs — whether MEMORY.md exists or not.
 - **Scope = exactly what was asked** — no extra UI, no refactoring, no comments on unchanged code
 - **Verify before coding** — read relevant files before editing; never guess at structure
 - **No speculation** — only write confirmed facts; ask if unsure
-- [Carry forward any project-specific rules from the existing MEMORY.md]
 
 ## Tech Stack
 [3-5 bullet points covering framework, backend, database, external APIs, key libraries]
@@ -430,11 +442,10 @@ This step always runs — whether MEMORY.md exists or not.
 ## Key Commands
 | Command | Purpose |
 |---------|---------|
-| [List any custom slash commands found in .claude/commands/ — include all of them] |
+| [List any custom slash commands found in .claude/commands/] |
 
 ## Topic Files (load when working in these areas)
 *Auto-maintained by background AI after each session. Read the relevant file before starting work in that domain.*
-[List any existing topic files found in memory/topics/, with one-line descriptions]
 - New topic files are created automatically as new domains are worked on
 
 ## Session Memory (auto-updated every session end)
@@ -443,9 +454,7 @@ This step always runs — whether MEMORY.md exists or not.
 - `memory/sessions/updater-log.md` — background AI updater run history
 
 ## Auto-Maintenance
-After every session, a background `claude -p haiku` process reads the full session transcript and updates `memory/topics/*.md` with new discoveries. During sessions, also update topic files immediately when confirming new facts (schema details, code paths, bugs fixed, gotchas).
-
-[Carry forward any Terminology, Agent rules, or other sections from the existing MEMORY.md that don't fit above]
+After every session, a background `claude -p haiku` process reads the full session transcript and updates `memory/topics/*.md` with new discoveries.
 
 ## Current Date
 Today's date is [TODAY'S DATE].
@@ -453,16 +462,16 @@ Today's date is [TODAY'S DATE].
 
 ### Step 8 — Update `.claude/settings.local.json`
 
-**Read the entire existing file first.** Preserve ALL existing content — `permissions`, `enableAllProjectMcpServers`, `enabledMcpjsonServers`, and every existing hook entry. Only add the new `SessionStart` and `Stop` entries.
+**Read the entire existing file first.** Preserve ALL existing content. Only add the new `SessionStart` and `Stop` hook entries.
 
-Use the **full absolute path** to the memory hooks (not `~` — expand it completely). Use forward slashes on all platforms.
+Use the **full absolute path** to the memory hooks (not `~` — expand completely). Use forward slashes on all platforms.
 
-**If the file has existing hooks**, merge carefully:
+**If the file has existing hooks**, merge carefully — preserve all other hook events:
 ```json
 {
   "permissions": { "allow": ["...existing entries..."] },
   "hooks": {
-    "PostToolUse": ["...preserve existing PostToolUse exactly..."],
+    "PostToolUse": ["...preserve existing exactly..."],
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "node /full/absolute/path/memory/hooks/session-start.js", "timeout": 15 }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "node /full/absolute/path/memory/hooks/session-end.js", "timeout": 30 }] }]
   }
@@ -512,6 +521,6 @@ Tell the user:
 ## Rules
 - Do NOT skip Step 9 — hooks that fail produce no error; the system silently stops working
 - Do NOT use `~` in hook command paths in settings.local.json — always expand to full absolute path
-- Do NOT overwrite an existing `MEMORY.md` — skip Step 7 if the file already exists
+- Do NOT create `MEMORY.md` if it already exists — skip Step 7
 - Do NOT remove any existing keys from `settings.local.json` — only add new hook entries
 - If all 3 hook files already exist, skip Steps 4–6 and go straight to Step 9 to verify they still work
