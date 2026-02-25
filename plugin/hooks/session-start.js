@@ -59,7 +59,8 @@ function getTopicHints(modifiedFiles) {
     const relevant = topics.filter(t => {
       const keyword = t.replace('.md', '').replace(/-/g, '');
       const keyword2 = t.replace('.md', '');
-      return f.includes(keyword) || f.includes(keyword2);
+      const keyword3 = t.replace('.md', '').replace(/-/g, '_');
+      return f.includes(keyword) || f.includes(keyword2) || f.includes(keyword3);
     });
     if (relevant.length > 0) {
       return `\n**Relevant topic files:** ${relevant.map(t => `\`memory/topics/${t}\``).join(', ')} — read for deep context`;
