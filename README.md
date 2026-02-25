@@ -11,7 +11,11 @@ A Claude Code plugin that sets up a self-maintaining AI memory system for any pr
 ## Install
 
 ```bash
-claude plugin install github:kolin-hj/setup-memory
+# 1. Add the marketplace (one time, global)
+claude plugin marketplace add github:kolin-hj/setup-memory
+
+# 2. Install the plugin
+claude plugin install setup-memory
 ```
 
 ## Usage

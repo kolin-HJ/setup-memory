@@ -1,0 +1,19 @@
+{
+  "name": "setup-memory",
+  "description": "Self-maintaining AI memory system for Claude Code — automatically learns your codebase over time",
+  "owner": {
+    "name": "Kolin",
+    "url": "https://github.com/kolin-hj"
+  },
+  "metadata": {
+    "description": "Self-maintaining AI memory system for Claude Code — automatically learns your codebase over time through session hooks and background AI analysis"
+  },
+  "plugins": [
+    {
+      "name": "setup-memory",
+      "description": "Sets up a self-maintaining AI memory system. Every session start injects live git context. Every session end runs a background AI to update topic files with new discoveries.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
