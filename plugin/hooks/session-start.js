@@ -50,14 +50,24 @@ function readFile(relPath) {
   }
 }
 
-function detectActiveDomains(modifiedFiles) {
-  const domains = new Set();
-  const f = modifiedFiles.toLowerCase();
-  if (f.includes('demandplan') || f.includes('demand_plan')) domains.add('demand-plan');
-  if (f.includes('dashboard') || f.includes('unified')) domains.add('dashboard');
-  if (f.includes('purchaseplan') || f.includes('purchase_plan')) domains.add('purchase-plan');
-  if (f.includes('bigquery')) domains.add('bigquery');
-  return domains;
+function getTopicHints(modifiedFiles) {
+  try {
+    const topicsDir = path.join(MEMORY_DIR, 'topics');
+    const topics = fs.readdirSync(topicsDir).filter(f => f.endsWith('.md'));
+    if (topics.length === 0) return '';
+    const f = modifiedFiles.toLowerCase();
+    const relevant = topics.filter(t => {
+      const keyword = t.replace('.md', '').replace(/-/g, '');
+      const keyword2 = t.replace('.md', '');
+      return f.includes(keyword) || f.includes(keyword2);
+    });
+    if (relevant.length > 0) {
+      return `\n**Relevant topic files:** ${relevant.map(t => `\`memory/topics/${t}\``).join(', ')} — read for deep context`;
+    }
+    return `\n**Topic files available:** ${topics.map(t => `\`memory/topics/${t}\``).join(', ')}`;
+  } catch {
+    return '';
+  }
 }
 
 const branch = exec('git branch --show-current');
@@ -72,17 +82,14 @@ const briefingLabel = briefing ? '**Session Briefing (AI-synthesized):**' : '**L
 
 const pendingUpdates = readFile('sessions/pending-updates.md');
 
-const activeDomains = detectActiveDomains(modifiedFiles + lastDiffFiles);
-const domainHints = activeDomains.size > 0
-  ? `\n**Active domains detected:** ${[...activeDomains].join(', ')} — consider reading memory/topics/*.md for deep context`
-  : '';
+const topicHints = getTopicHints(modifiedFiles + lastDiffFiles);
 
 const parts = [];
 if (branch) parts.push(`**Branch:** \`${branch}\``);
 if (recentCommits) parts.push(`**Recent Commits (last 7):**\n\`\`\`\n${recentCommits}\n\`\`\``);
 if (modifiedFiles) parts.push(`**Uncommitted Changes:**\n\`\`\`\n${modifiedFiles}\n\`\`\``);
 else parts.push('**Uncommitted Changes:** (working tree clean)');
-if (domainHints) parts.push(domainHints);
+if (topicHints) parts.push(topicHints);
 if (lastSession) parts.push(`${briefingLabel}\n${lastSession}`);
 if (pendingUpdates) parts.push(`**⚠ Pending Memory Updates (from last session):**\n${pendingUpdates}`);
 
