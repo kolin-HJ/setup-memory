@@ -141,7 +141,39 @@ Use the **full absolute path** to the memory hooks (not `~` — expand completel
 }
 ```
 
-### Step 8 — Test both hooks
+### Step 8 — Create `<memory-dir>/README.md`
+
+**Only run this step if `README.md` does NOT already exist in the memory directory.**
+
+Create `<memory-dir>/README.md` with the following content (this helps future Claude sessions understand the memory structure immediately):
+
+```markdown
+# Project Memory
+
+This directory maintains persistent AI memory for this project.
+
+## Structure
+- `topics/` — Deep technical context by domain (auto-updated after each session)
+- `sessions/` — Session logs, briefings, and update logs
+  - `latest.md` — Most recent session activity
+  - `briefing.md` — AI-synthesized context for next session start
+  - `updater-log.md` — Background job logs
+  - `decisions.md` — NOT HERE (see topics/decisions.md)
+
+## How to use
+- At session start: context auto-injected. Topic files loaded automatically.
+- At session end: topic files updated in background (~30-60s after session ends)
+- Run `/setup-memory` to reinitialize if hooks break
+
+## Topic files
+Auto-created based on what gets worked on. Common ones:
+- `topics/architecture.md` — System design decisions
+- `topics/decisions.md` — Why things were built certain ways
+- `topics/commands.md` — Working commands and scripts
+- `topics/lessons.md` — Failed approaches to avoid
+```
+
+### Step 9 — Test both hooks
 
 Run each hook directly and verify output:
 
@@ -159,7 +191,7 @@ Must output exactly `{"decision":"approve"}`.
 
 If either test fails, diagnose and fix before finishing.
 
-### Step 9 — Report back
+### Step 10 — Report back
 
 Tell the user:
 1. The full memory directory path
@@ -172,8 +204,9 @@ Tell the user:
 ---
 
 ## Rules
-- Do NOT skip Step 8 — hooks that fail produce no error; the system silently stops working
+- Do NOT skip Step 9 — hooks that fail produce no error; the system silently stops working
 - Do NOT use `~` in hook command paths in settings.local.json — always expand to full absolute path
 - Do NOT create `MEMORY.md` if it already exists — skip Step 6
+- Do NOT create `README.md` if it already exists in the memory directory — skip Step 8
 - Do NOT remove any existing keys from `settings.local.json` — only add new hook entries
 - If all 5 hook files already exist in `<memory-dir>/hooks/`, still copy them (Step 5) — this updates to latest plugin version
