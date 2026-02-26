@@ -136,6 +136,9 @@ const pass2Prompt = `Based on this audit of memory topic files:
 
 ${auditOutput}
 
+Current file contents to fix:
+${topicContents}
+
 Now update the topic files to fix the identified issues.
 Rules:
 - Remove outdated info

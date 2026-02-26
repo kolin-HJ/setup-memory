@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
- * Memory Updater — Background AI Memory Maintenance (Two-Pass Recursive)
+ * Memory Updater — Background AI Memory Maintenance (Three-Pass Recursive)
  *
  * Spawned by session-end.js after every session. Reads the session transcript,
  * extracts new technical discoveries, and updates memory topic files.
  *
- * Uses two sequential `claude -p` calls with haiku model:
+ * Uses three sequential `claude -p` calls with haiku model:
  *   Pass 1: Extract new facts from transcript into topic files
+ *           (also captures lessons learned and failed approaches)
  *   Pass 2: Review Pass 1 output, fix gaps and errors (recursive self-critique)
+ *   Pass 3: Extract architectural decisions → decisions.md
+ *           and working commands → commands.md
  *
  * Based on "Test-time Recursive Thinking" research (Feb 2026) — models produce
  * significantly better output when reviewing their own work.
@@ -39,9 +42,14 @@ try {
 
 if (messages.length === 0) process.exit(0);
 
-// Extract conversation (last 60 messages, text only)
+// Extract conversation — take first 8 messages (session setup context) + last 45 (recent work)
+// This avoids missing the beginning of long sessions while still focusing on recent work
+const relevant = messages.length > 53
+  ? [...messages.slice(0, 8), ...messages.slice(-45)]
+  : messages;
+
 const conversationLines = [];
-for (const entry of messages.slice(-60)) {
+for (const entry of relevant) {
   const msg = entry.message || entry;
   if (!msg.role || !['user', 'assistant'].includes(msg.role)) continue;
   const rawContent = msg.content || '';
@@ -130,6 +138,12 @@ YOUR TASK:
 3. Update relevant topic file(s) with these facts
 4. If a NEW domain was heavily worked on (not covered by existing topics), CREATE memory/topics/{domain}.md
 
+Also capture in memory/topics/lessons.md (create if needed, header: "# Lessons Learned"):
+- Any approaches that FAILED and why (prevents future Claude from repeating mistakes)
+- Any non-obvious gotchas discovered (e.g., "X only works when Y is set")
+- Any corrections to previous assumptions
+Only write confirmed failures/gotchas, not speculation.
+
 RULES:
 - ONLY write facts confirmed in this session — no speculation
 - Read existing topic files first to avoid duplication
@@ -208,4 +222,48 @@ ${conversationLines.join('\n\n')}`;
   appendLog(`Pass 2: skipped — no topic files were modified in Pass 1\n`);
 }
 
-appendLog(`Total budget cap: $0.15\n`);
+// ── Pass 3: Decisions and Commands extraction ──────────────────────────────
+
+appendLog(`Pass 3 start — extracting decisions and working commands\n`);
+const pass3Start = Date.now();
+
+const pass3Prompt = `Review this coding session and extract two specific things:
+
+1. ARCHITECTURAL DECISIONS: Any explicit decisions made about how to build/structure things.
+   Format: "Why X instead of Y: [reason]" or "Chose X because: [reason]"
+   These explain the WHY behind code choices.
+
+2. WORKING COMMANDS: Any shell commands, scripts, or one-liners that were confirmed to work.
+   Include exact syntax. Format: "# [what it does]\\n$ [command]"
+
+Session:
+${conversationLines.join('\n\n')}
+
+Append decisions to: memory/topics/decisions.md (create if needed, header: "# Decisions Log")
+Append commands to: memory/topics/commands.md (create if needed, header: "# Working Commands")
+Only append if you found something genuinely worth keeping. Skip if nothing new.`;
+
+const pass3Result = spawnSync('claude', [
+  '-p',
+  '--input-format', 'text',
+  '--allowedTools', 'Read,Write,Edit,Glob',
+  '--model', 'haiku',
+  '--max-budget-usd', '0.03',
+  '--permission-mode', 'acceptEdits',
+  '--no-session-persistence',
+], {
+  input: pass3Prompt,
+  cwd: projectDir,
+  timeout: 90000,
+  encoding: 'utf8',
+  windowsHide: true,
+});
+
+const pass3Elapsed = ((Date.now() - pass3Start) / 1000).toFixed(1);
+const pass3Status = pass3Result.status === 0 ? '✓ done' : `✗ error (exit ${pass3Result.status})`;
+appendLog(`Pass 3: ${pass3Status} in ${pass3Elapsed}s\n${pass3Result.stderr?.slice(0, 200) || ''}\n`);
+
+appendLog(`Total budget cap: $0.18\n`);
+
+// Clear the pending jobs flag now that all passes are complete
+try { fs.unlinkSync(path.join(memoryDir, 'sessions', 'jobs-pending.json')); } catch {}

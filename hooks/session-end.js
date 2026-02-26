@@ -147,6 +147,15 @@ try {
   fs.appendFileSync(logPath, `\n## ${timestamp} — session ended, spawning background jobs\n`, 'utf8');
 } catch {}
 
+// Mark jobs as pending (session-start will check this to warn about stale topic files)
+try {
+  fs.writeFileSync(
+    path.join(SESSIONS_DIR, 'jobs-pending.json'),
+    JSON.stringify({ spawnedAt: new Date().toISOString(), jobs: ['memory-updater', 'session-synthesizer', 'memory-health'] }),
+    'utf8'
+  );
+} catch {}
+
 function spawnDetached(script, args) {
   if (!fs.existsSync(script)) return;
   const child = spawn(process.execPath, [script, ...args], {

@@ -2,19 +2,18 @@
 /**
  * Session Synthesizer — Pre-Computed Briefing for Next Session
  *
- * Runs synchronously at session END (triggered by session-end.js).
+ * Runs asynchronously at session END (triggered by session-end.js).
  * Generates a concise AI-synthesized briefing so session START gets rich
  * context instead of raw git state.
  *
  * Reads:
  *   - sessions/latest.md (what was worked on)
- *   - Last 30 transcript messages (user messages only)
- *   - Relevant topic files
+ *   - Last 10 transcript user messages (what was actually being built/fixed)
+ *   - 3 most recently modified topic files (accumulated project knowledge)
  *
  * Writes: sessions/briefing.md
  *
- * Uses `claude -p haiku` (~5-10s, fast). Runs synchronously so session-end.js
- * waits for it before finishing.
+ * Uses `claude -p haiku` (~5-10s, fast). Runs detached as background job.
  *
  * PORTABLE: All paths passed as arguments — no hardcoded values.
  *
@@ -64,6 +63,30 @@ if (transcriptPath && fs.existsSync(transcriptPath)) {
   } catch {}
 }
 
+// Load the 3 most recently modified topic files for richer synthesis context
+function getRecentTopicContent(memoryDir) {
+  try {
+    const topicsDir = path.join(memoryDir, 'topics');
+    const files = fs.readdirSync(topicsDir)
+      .filter(f => f.endsWith('.md'))
+      .map(f => ({
+        name: f,
+        mtime: (() => { try { return fs.statSync(path.join(topicsDir, f)).mtimeMs; } catch { return 0; } })()
+      }))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, 3);
+
+    return files.map(({ name }) => {
+      const content = (() => { try { return fs.readFileSync(path.join(topicsDir, name), 'utf8').trim(); } catch { return ''; } })();
+      return content ? `### ${name}\n${content.split('\n').slice(0, 40).join('\n')}` : '';
+    }).filter(Boolean).join('\n\n');
+  } catch {
+    return '';
+  }
+}
+
+const topicContext = getRecentTopicContent(memoryDir);
+
 const prompt = `You are generating a session briefing for the NEXT coding session on this project.
 
 SESSION ACTIVITY:
@@ -71,6 +94,9 @@ ${latestSession}
 
 RECENT USER REQUESTS (what was actually being built/fixed):
 ${userMessages.length > 0 ? userMessages.map((m, i) => `${i + 1}. ${m.replace(/\n/g, ' ')}`).join('\n') : '(not available)'}
+
+PROJECT ACCUMULATED KNOWLEDGE (recent topics):
+${topicContext || '(no topic files yet)'}
 
 TASK: Write a concise briefing (max 10 bullet points) for the developer opening this project tomorrow.
 Focus on:
@@ -100,7 +126,7 @@ const result = spawnSync('claude', [
 if (result.status === 0 && result.stdout && result.stdout.trim()) {
   const generated = result.stdout.trim();
   const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  const briefingContent = `<!-- Generated: ${timestamp} -->\n${generated}\n`;
+  const briefingContent = `*Synthesized: ${timestamp} — confidence: fresh*\n\n${generated}\n`;
   try {
     fs.mkdirSync(sessionsDir, { recursive: true });
     fs.writeFileSync(briefingPath, briefingContent, 'utf8');
