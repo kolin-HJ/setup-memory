@@ -20,6 +20,10 @@ After one `/setup-memory` command, each session start automatically injects your
 **Step 1 — Install the plugin** *(one-time global setup, run in your terminal)*
 
 ```bash
+claude plugin marketplace add kolin-hj/setup-memory
+```
+
+```bash
 claude plugin install setup-memory
 ```
 
