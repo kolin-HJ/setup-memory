@@ -74,19 +74,24 @@ function getRelevantTopicContent(modifiedFiles) {
 
     if (relevant.length === 0) {
       // Fall back: load most recently modified topic files
-      const withMtimes = topics.map(t => ({
-        name: t,
-        mtime: (() => { try { return fs.statSync(path.join(topicsDir, t)).mtimeMs; } catch { return 0; } })()
-      })).sort((a, b) => b.mtime - a.mtime).slice(0, 2);
+      const withMtimes = topics
+        .map(t => {
+          let mtime = 0;
+          try { mtime = fs.statSync(path.join(topicsDir, t)).mtimeMs; } catch {}
+          return { name: t, mtime };
+        })
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 2);
       relevant.push(...withMtimes.map(w => w.name));
     }
 
     const sections = relevant.map(t => {
-      const content = (() => { try { return fs.readFileSync(path.join(topicsDir, t), 'utf8').trim(); } catch { return ''; } })();
+      let content = '';
+      try { content = fs.readFileSync(path.join(topicsDir, t), 'utf8').trim(); } catch {}
       if (!content) return '';
       const lines = content.split('\n').slice(0, 80).join('\n');
       return `**memory/topics/${t}:**\n${lines}`;
-    }).filter(s => s.includes('\n'));
+    }).filter(Boolean);
 
     return sections.length > 0 ? sections.join('\n\n') : '';
   } catch {

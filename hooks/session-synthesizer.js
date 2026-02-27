@@ -69,15 +69,17 @@ function getRecentTopicContent(memoryDir) {
     const topicsDir = path.join(memoryDir, 'topics');
     const files = fs.readdirSync(topicsDir)
       .filter(f => f.endsWith('.md'))
-      .map(f => ({
-        name: f,
-        mtime: (() => { try { return fs.statSync(path.join(topicsDir, f)).mtimeMs; } catch { return 0; } })()
-      }))
+      .map(f => {
+        let mtime = 0;
+        try { mtime = fs.statSync(path.join(topicsDir, f)).mtimeMs; } catch {}
+        return { name: f, mtime };
+      })
       .sort((a, b) => b.mtime - a.mtime)
       .slice(0, 3);
 
     return files.map(({ name }) => {
-      const content = (() => { try { return fs.readFileSync(path.join(topicsDir, name), 'utf8').trim(); } catch { return ''; } })();
+      let content = '';
+      try { content = fs.readFileSync(path.join(topicsDir, name), 'utf8').trim(); } catch {}
       return content ? `### ${name}\n${content.split('\n').slice(0, 40).join('\n')}` : '';
     }).filter(Boolean).join('\n\n');
   } catch {

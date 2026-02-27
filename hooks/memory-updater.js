@@ -65,6 +65,8 @@ for (const entry of relevant) {
 
 if (conversationLines.length < 3) process.exit(0);
 
+const conversationText = conversationText;
+
 // Discover existing topic files
 const topicsDir = path.join(memoryDir, 'topics');
 let existingTopics = [];
@@ -125,7 +127,7 @@ const pass1Prompt = `You are maintaining persistent memory files for a software 
 EXISTING TOPIC FILES: ${existingTopics.length > 0 ? existingTopics.join(', ') : '(none yet)'}
 
 SESSION CONVERSATION:
-${conversationLines.join('\n\n')}
+${conversationText}
 
 YOUR TASK:
 1. Read the conversation above
@@ -197,7 +199,7 @@ For each file you updated, ask yourself:
 Then make targeted corrections and additions. Be concise — only change what genuinely needs improvement.
 
 SESSION CONVERSATION (for reference):
-${conversationLines.join('\n\n')}`;
+${conversationText}`;
 
   const pass2Result = spawnSync('claude', [
     '-p',
@@ -237,7 +239,7 @@ const pass3Prompt = `Review this coding session and extract two specific things:
    Include exact syntax. Format: "# [what it does]\\n$ [command]"
 
 Session:
-${conversationLines.join('\n\n')}
+${conversationText}
 
 Append decisions to: memory/topics/decisions.md (create if needed, header: "# Decisions Log")
 Append commands to: memory/topics/commands.md (create if needed, header: "# Working Commands")

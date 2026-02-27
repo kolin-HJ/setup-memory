@@ -77,9 +77,8 @@ appendLog(`Auditing ${topicFiles.length} topic files after ${healthState.session
 
 // Build topic file contents for the prompt
 const topicContents = topicFiles.map(f => {
-  const content = (() => {
-    try { return fs.readFileSync(path.join(topicsDir, f), 'utf8').trim(); } catch { return '(unreadable)'; }
-  })();
+  let content = '(unreadable)';
+  try { content = fs.readFileSync(path.join(topicsDir, f), 'utf8').trim(); } catch {}
   return `### memory/topics/${f}\n${content}`;
 }).join('\n\n');
 

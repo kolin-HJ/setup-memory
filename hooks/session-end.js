@@ -48,11 +48,10 @@ function detectPendingTopics(changedFiles, assistantContent) {
     const existing = fs.readdirSync(topicsDir).filter(f => f.endsWith('.md'));
     const combined = (changedFiles + ' ' + assistantContent).toLowerCase();
     for (const topicFile of existing) {
-      const keyword = topicFile.replace('.md', '').replace(/-/g, '');
-      const keyword2 = topicFile.replace('.md', '');
-      const keyword3 = topicFile.replace('.md', '').replace(/-/g, '_');
-      if (combined.includes(keyword) || combined.includes(keyword2) || combined.includes(keyword3)) {
-        pending.add(topicFile.replace('.md', ''));
+      const base = topicFile.slice(0, -3);
+      const variants = [base.replace(/-/g, ''), base, base.replace(/-/g, '_')];
+      if (variants.some(v => combined.includes(v))) {
+        pending.add(base);
       }
     }
   } catch {}
@@ -142,7 +141,7 @@ try {
 
 // Log that background jobs are being spawned
 const logPath = path.join(MEMORY_DIR, 'sessions', 'updater-log.md');
-const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+const timestamp = now.toISOString().slice(0, 16).replace('T', ' ');
 try {
   fs.appendFileSync(logPath, `\n## ${timestamp} — session ended, spawning background jobs\n`, 'utf8');
 } catch {}
@@ -151,7 +150,7 @@ try {
 try {
   fs.writeFileSync(
     path.join(SESSIONS_DIR, 'jobs-pending.json'),
-    JSON.stringify({ spawnedAt: new Date().toISOString(), jobs: ['memory-updater', 'session-synthesizer', 'memory-health'] }),
+    JSON.stringify({ spawnedAt: now.toISOString(), jobs: ['memory-updater', 'session-synthesizer', 'memory-health'] }),
     'utf8'
   );
 } catch {}
